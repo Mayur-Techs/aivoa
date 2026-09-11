@@ -6,7 +6,18 @@ from .config import get_settings
 from .models import Base
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, future=True)
+
+
+def async_database_url(url: str) -> str:
+    """Accept standard managed-Postgres URLs while retaining async SQLAlchemy drivers."""
+    if url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + url.removeprefix("postgres://")
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url.removeprefix("postgresql://")
+    return url
+
+
+engine = create_async_engine(async_database_url(settings.database_url), future=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

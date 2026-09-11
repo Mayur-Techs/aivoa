@@ -3,6 +3,13 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.database import async_database_url
+
+
+def test_managed_postgres_urls_use_async_driver() -> None:
+    assert async_database_url("postgresql://user:pass@host:5432/db") == "postgresql+asyncpg://user:pass@host:5432/db"
+    assert async_database_url("postgres://user:pass@host:5432/db") == "postgresql+asyncpg://user:pass@host:5432/db"
+    assert async_database_url("sqlite+aiosqlite:///./aivoa.db") == "sqlite+aiosqlite:///./aivoa.db"
 
 
 def test_chat_then_correction_preserves_intake() -> None:

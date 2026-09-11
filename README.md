@@ -79,7 +79,12 @@ pnpm build
 
 ## Deployment notes
 
-- Deploy `frontend/` as a static Vite site, with `VITE_API_URL` set to the API URL.
-- Deploy `backend/` as a Python web service using `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-- Use a managed PostgreSQL connection string in `DATABASE_URL` and set `FRONTEND_ORIGIN` to the frontend's exact HTTPS origin.
-- Keep `GROQ_API_KEY` server-side only. Never set it as a frontend `VITE_` variable.
+This repository includes a free-tier Render Blueprint in `render.yaml`. It creates a FastAPI web service, a static Vite site, and a free PostgreSQL database. Free services can sleep when idle, so the first request may take longer.
+
+1. Create an **empty** GitHub repository (do not add a README or `.gitignore`), push this repository, then create a new Render Blueprint from it.
+2. In Render, choose unique names if the default names are unavailable. Deploy the API and database first.
+3. Copy the API's `https://<api-name>.onrender.com` address into the static site's `VITE_API_URL` environment variable.
+4. Copy the static site's `https://<site-name>.onrender.com` address into the API's `FRONTEND_ORIGIN` variable.
+5. Add `GROQ_API_KEY` to the API service only, then redeploy both services.
+
+Render supplies the PostgreSQL connection string automatically and the Blueprint pins Python 3.12.14. The backend converts the standard `postgresql://` form to SQLAlchemy's asynchronous driver URL. Keep `GROQ_API_KEY` server-side only; never set it as a frontend `VITE_` variable.

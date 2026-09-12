@@ -1,5 +1,5 @@
+from datetime import date
 from typing import TypedDict
-import json
 
 from langgraph.graph import END, START, StateGraph
 
@@ -19,20 +19,59 @@ class IntakeState(TypedDict, total=False):
     extracted_fields: list[str]
 
 
-EXTRACTION_PROMPT = """You are an AI assistant processing pharmaceutical customer complaints.
-You are given the CURRENT STATE of a complaint form, and a NEW USER MESSAGE (which might be an initial report, a document upload, or a correction).
-Your task is to extract ONLY the new or updated structured facts from the new message.
-Do not invent traceability details. Do not repeat fields that are already in the CURRENT STATE unless they are being corrected.
-For a correction, return only the changed fields. Infer a concise complaint_type only when the text clearly supports it.
-Use ISO dates when dates are explicit. Put the original statement in detailed_complaint_description only for a new complaint or document, not a correction.
+# Current year injected so the LLM can resolve "25 September" → "2026-09-25"
+_CURRENT_YEAR = date.today().year
+
+EXTRACTION_PROMPT = f"""You are a data extraction assistant for a pharmaceutical complaint management system.
+Today's year is {_CURRENT_YEAR}.
+
+FIELD DEFINITIONS — map the user's natural language to EXACTLY these field names:
+  customer_source      → where the complaint came from (e.g. "Direct Customer", "Distributor", "Document upload")
+  customer_name        → name of the customer or company filing the complaint (e.g. "Apollo Pharmacy")
+  product_name         → pharmaceutical product name (e.g. "Amoxicillin Capsules", "Metformin Hydrochloride API")
+  product_strength_grade → dosage strength or grade (e.g. "500 mg", "IP/BP", "250 mg/5 ml")
+  batch_lot_number     → batch number or lot number (e.g. "AMX240602", "MFH260712A")
+  manufacturing_date   → date the product was manufactured; user may say "manufacturing date", "mfg date", "manufacture date"
+  expiry_date          → expiry/expiration date of the product; user may say "expiry date", "expiration date", "exp date"
+  affected_quantity    → how many units are affected (e.g. "48 capsules", "50 kg", "2 HDPE drums")
+  complaint_type       → category of complaint (e.g. "Product appearance", "Packaging defect", "Potential contamination")
+  complaint_date       → the date the complaint was filed/received; user may say "complaint date", "date of complaint", "reported date"
+  detailed_complaint_description → full description of what happened (only set for NEW complaints or documents, NOT for short corrections)
+
+DATE FORMATTING RULES:
+  - Full date like "25 September" or "September 25" → use year {_CURRENT_YEAR}: output "2026-09-25"
+  - "25 September 2025" → output "2025-09-25"
+  - "April 2026" or "March 2026" → output as-is: "April 2026", "March 2026"
+  - ISO dates like "2026-03-15" → keep as-is
+
+INSTRUCTIONS:
+  1. You receive CURRENT STATE (what is already in the form) and a NEW USER MESSAGE.
+  2. If the message is a CORRECTION (user says "change X", "I made a mistake in X", "update X", "correct X"):
+     - Extract ONLY the field(s) being corrected.
+     - Set all other fields to null — do NOT copy from CURRENT STATE.
+  3. If the message is a NEW COMPLAINT or DOCUMENT UPLOAD:
+     - Extract all facts mentioned. Set detailed_complaint_description to the full text.
+  4. Do NOT invent values. Do NOT hallucinate field values not stated in the message.
+  5. Do NOT repeat fields that are already correct in CURRENT STATE.
+  6. If a field is not mentioned in the NEW MESSAGE, set it to null in your output.
 """
 
-ASSESSMENT_PROMPT = """You are an AI Quality Assurance expert. Review the following pharmaceutical complaint and generate a Risk Assessment based on your own reasoning.
-Classify the severity (Critical, Major, Minor, Pending assessment) and priority (Urgent, High, Normal, Low, Pending triage).
-Provide a clear suggested_next_action (e.g. Route to QA investigation, quarantine stock, issue replacement).
-Provide a rationale explaining your classification.
-Provide 1 to 3 root_cause_hypotheses that QA should investigate (e.g. Review batch manufacturing records, check retained samples).
-Provide a capa_recommendation (Corrective and Preventive Action) based on the likely root cause.
+ASSESSMENT_PROMPT = """You are an AI Quality Assurance expert reviewing a pharmaceutical customer complaint.
+Generate a professional Risk Assessment based on your reasoning about the complaint.
+
+SEVERITY GUIDANCE:
+  - Critical: contamination, microbial issue, patient safety risk, wrong product, foreign matter
+  - Major: discoloration, leakage, broken/defective packaging, dissolution failure, labelling issue
+  - Minor: general complaints without a clear safety or quality defect signal
+
+OUTPUT REQUIREMENTS:
+  - severity: one of "Critical", "Major", "Minor", "Pending assessment"
+  - priority: one of "Urgent", "High", "Normal", "Low", "Pending triage"
+  - suggested_next_action: a concrete, professional QA action (e.g. "Route to QA investigation and issue replacement")
+  - rationale: 1-2 sentences explaining your classification
+  - root_cause_hypotheses: 2-3 specific investigation cues for QA (e.g. "Review batch manufacturing records for lot AMX240602")
+  - capa_recommendation: one concrete CAPA sentence
+  - completeness_score and missing_fields will be filled automatically — set them to 0 and [] respectively
 """
 
 
@@ -47,10 +86,15 @@ def _llm_extract(text: str, current: ComplaintForm) -> ComplaintForm:
         model=settings.groq_model,
         temperature=0,
     ).with_structured_output(ComplaintForm)
-    
+
     current_json = current.model_dump_json(exclude_none=True)
-    prompt = f"{EXTRACTION_PROMPT}\n\nCURRENT STATE:\n{current_json}\n\nNEW MESSAGE:\n{text}"
+    prompt = (
+        f"{EXTRACTION_PROMPT}\n\n"
+        f"CURRENT STATE:\n{current_json}\n\n"
+        f"NEW USER MESSAGE:\n{text}"
+    )
     return model.invoke(prompt)
+
 
 def _llm_assess(complaint: ComplaintForm) -> RiskAssessment:
     from langchain_groq import ChatGroq
@@ -61,14 +105,14 @@ def _llm_assess(complaint: ComplaintForm) -> RiskAssessment:
     model = ChatGroq(
         api_key=settings.groq_api_key,
         model=settings.groq_model,
-        temperature=0.2, # slightly higher for reasoning 
+        temperature=0.2,
     ).with_structured_output(RiskAssessment)
-    
+
     complaint_json = complaint.model_dump_json(exclude_none=True)
     prompt = f"{ASSESSMENT_PROMPT}\n\nCOMPLAINT DATA:\n{complaint_json}"
     assessment = model.invoke(prompt)
-    
-    # Deterministically calculate missing fields & score to ensure accuracy
+
+    # Always calculate these deterministically — LLMs are unreliable at counting
     required = {
         "Customer": complaint.customer_name,
         "Product": complaint.product_name,
@@ -78,7 +122,6 @@ def _llm_assess(complaint: ComplaintForm) -> RiskAssessment:
     }
     missing = [name for name, value in required.items() if not value]
     score = round((len(required) - len(missing)) / len(required) * 100)
-    
     assessment.missing_fields = missing
     assessment.completeness_score = score
     return assessment
@@ -86,9 +129,10 @@ def _llm_assess(complaint: ComplaintForm) -> RiskAssessment:
 
 def extract_node(state: IntakeState) -> dict:
     try:
-        return {"extracted": _llm_extract(state["text"], state.get("current", ComplaintForm())), "mode": "llm"}
+        extracted = _llm_extract(state["text"], state.get("current", ComplaintForm()))
+        return {"extracted": extracted, "mode": "llm"}
     except Exception:
-        # A local deterministic fallback keeps demonstrations useful without credentials or during provider outages.
+        # Conservative regex fallback — keeps demo useful without API key or during outages
         return {"extracted": rule_extract(state["text"]), "mode": "rules"}
 
 
@@ -106,11 +150,25 @@ def assess_node(state: IntakeState) -> dict:
             assessment = assess(state["complaint"])
     else:
         assessment = assess(state["complaint"])
-        
-    field_note = ", ".join(field.replace("_", " ") for field in state.get("extracted_fields", []))
-    response = (
-        f"I updated {field_note}. " if field_note else "I reviewed the complaint. "
-    ) + f"Current triage: {assessment.severity} severity / {assessment.priority} priority."
+
+    extracted_fields = state.get("extracted_fields", [])
+    # Filter out noisy fields from the "updated" message (description is implicit)
+    display_fields = [
+        f.replace("_", " ")
+        for f in extracted_fields
+        if f != "detailed_complaint_description"
+    ]
+
+    if display_fields:
+        field_note = ", ".join(display_fields)
+        response = f"✅ Updated: {field_note}. Current triage: {assessment.severity} severity / {assessment.priority} priority."
+    else:
+        response = (
+            f"I reviewed the complaint but didn't detect any field changes in your message. "
+            f"Try saying something like: \"change the complaint date to 25 September\" or "
+            f"\"update batch number to XYZ123\". "
+            f"Current triage: {assessment.severity} / {assessment.priority}."
+        )
     return {"risk_assessment": assessment, "assistant_message": response}
 
 

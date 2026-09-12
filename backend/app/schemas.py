@@ -1,4 +1,3 @@
-from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -10,11 +9,12 @@ class ComplaintForm(BaseModel):
     product_name: str | None = None
     product_strength_grade: str | None = None
     batch_lot_number: str | None = None
-    manufacturing_date: date | None = None
-    expiry_date: date | None = None
+    # Dates can be full (2026-03-15) or partial (March 2026); never invent a day.
+    manufacturing_date: str | None = None
+    expiry_date: str | None = None
     affected_quantity: str | None = None
     complaint_type: str | None = None
-    complaint_date: date | None = None
+    complaint_date: str | None = None
     detailed_complaint_description: str | None = None
     initial_severity: str | None = None
     priority: str | None = None

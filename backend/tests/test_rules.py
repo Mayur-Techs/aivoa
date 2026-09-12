@@ -24,3 +24,14 @@ def test_discoloration_is_major() -> None:
     assessment = assess(ComplaintForm(detailed_complaint_description="Customer reports discolored capsules."))
     assert assessment.severity == "Major"
     assert assessment.priority == "High"
+
+
+def test_extracts_month_year_dates_without_inventing_a_day() -> None:
+    result = rule_extract(
+        "Apollo Pharmacy reported discolored capsules in Amoxicillin Capsules 500 mg. "
+        "Batch number AMX240602. Manufacturing date March 2026. Expiry date February 2028."
+    )
+    assert result.product_name == "Amoxicillin Capsules"
+    assert result.batch_lot_number == "AMX240602"
+    assert result.manufacturing_date == "March 2026"
+    assert result.expiry_date == "February 2028"

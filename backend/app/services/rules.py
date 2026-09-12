@@ -4,7 +4,8 @@ from datetime import date
 from ..schemas import ComplaintForm, RiskAssessment
 
 
-DATE_PATTERN = r"(20\d{2}[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]20\d{2})"
+MONTH_YEAR_PATTERN = r"(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d{2}"
+DATE_PATTERN = rf"(?:20\d{{2}}[-/]\d{{2}}[-/]\d{{2}}|\d{{2}}[-/]\d{{2}}[-/]20\d{{2}}|{MONTH_YEAR_PATTERN})"
 
 
 def _first(pattern: str, text: str) -> str | None:
@@ -12,15 +13,20 @@ def _first(pattern: str, text: str) -> str | None:
     return match.group(1).strip(" .,:;") if match else None
 
 
-def parse_date(value: str | None) -> date | None:
+def normalize_date(value: str | None) -> str | None:
+    """Keep a partial month-year date intact rather than fabricating a day."""
     if not value:
         return None
+    month_year = re.fullmatch(MONTH_YEAR_PATTERN, value.strip(), flags=re.IGNORECASE)
+    if month_year:
+        month, year = value.split()
+        return f"{month.title()} {year}"
     for candidate in (value.replace("/", "-"),):
         try:
             parts = candidate.split("-")
             if len(parts[0]) == 4:
-                return date.fromisoformat(candidate)
-            return date(int(parts[2]), int(parts[1]), int(parts[0]))
+                return date.fromisoformat(candidate).isoformat()
+            return date(int(parts[2]), int(parts[1]), int(parts[0])).isoformat()
         except ValueError:
             continue
     return None
@@ -31,9 +37,9 @@ def rule_extract(text: str) -> ComplaintForm:
     batch = _first(r"(?:batch|lot)(?:\s*/\s*(?:lot|batch))?(?:\s*(?:number|no\.?|#))?\s*(?:is|:|=)?\s*([A-Z0-9-]{4,})", text)
     quantity = _first(r"(?:affected\s*quantity|quantity)\s*(?:is|:|=)?\s*([\d,.]+\s*(?:capsules?|tablets?|kg|g|mg|ml|l)(?:\s*(?:\([^)]*\)|\d+\s*hdpe\s*drums?))?)", text)
     strength = _first(r"\b(\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|%|iu)|(?:ip|bp|usp)(?:\s*/\s*(?:ip|bp|usp))?)\b", text)
-    mfg = _first(r"(?:manufacturing|manufacture|mfg)\s*date\s*(?:is|:|=)?\s*" + DATE_PATTERN, text)
-    expiry = _first(r"(?:expiry|expiration|exp)\s*date\s*(?:is|:|=)?\s*" + DATE_PATTERN, text)
-    complaint_date = _first(r"(?:complaint|reported)\s*date\s*(?:is|:|=)?\s*" + DATE_PATTERN, text)
+    mfg = _first(r"(?:manufacturing|manufacture|mfg)\s*date\s*(?:is|:|=)?\s*(" + DATE_PATTERN + r")", text)
+    expiry = _first(r"(?:expiry|expiration|exp)\s*date\s*(?:is|:|=)?\s*(" + DATE_PATTERN + r")", text)
+    complaint_date = _first(r"(?:complaint|reported)\s*date\s*(?:is|:|=)?\s*(" + DATE_PATTERN + r")", text)
     customer = _first(r"(?:customer|reported by|from)\s*(?:is|:|=)?\s*([A-Za-z][A-Za-z .&'-]{2,60})", text)
     if not customer:
         customer = _first(r"^([A-Z][A-Za-z .&'-]{2,60}?)\s+(?:reported|complained|notified)", text)
@@ -53,11 +59,11 @@ def rule_extract(text: str) -> ComplaintForm:
         product_name=product,
         product_strength_grade=strength,
         batch_lot_number=batch,
-        manufacturing_date=parse_date(mfg),
-        expiry_date=parse_date(expiry),
+        manufacturing_date=normalize_date(mfg),
+        expiry_date=normalize_date(expiry),
         affected_quantity=quantity,
         complaint_type=complaint_type,
-        complaint_date=parse_date(complaint_date),
+        complaint_date=normalize_date(complaint_date),
         detailed_complaint_description=text.strip() if len(text.strip()) <= 1500 else text.strip()[:1497] + "...",
     )
 

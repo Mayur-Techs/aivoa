@@ -128,19 +128,20 @@ function App() {
       <input ref={fileInput} className="visually-hidden" type="file" accept=".pdf,.docx,.txt,.csv,.eml" onChange={upload} />
       <p className="or">or</p>
       <button className="paste-action" onClick={() => setMessage("Paste the complaint text or email content below:")}>▤ Paste complaint text / email</button>
-      <form className="composer" onSubmit={send}>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Describe or correct this complaint..." disabled={isProcessing} />
-        <button className={`voice ${voiceStatus}`} type="button" onClick={startVoiceInput} disabled={isProcessing || voiceStatus === "listening"} aria-label="Speak complaint" aria-pressed={voiceStatus === "listening"} title="Speak complaint">
-          {voiceStatus === "listening" ? "●" : "◉"}
-        </button>
-        <button className="send" type="submit" disabled={!message.trim() || isProcessing} aria-label="Send message">➤</button>
-      </form>
-      {voiceNotice && <p className={`voice-notice ${voiceStatus}`} role="status">{voiceNotice}</p>}
       {isProcessing && <div className="progress" aria-live="polite"><div /><span>Extracting complaint facts and assessing risk...</span></div>}
       <section className="conversation" aria-live="polite">
         {messages.map((item) => <div className={`message ${item.role}`} key={item.id}><span>{item.role === "assistant" ? "✦" : "You"}</span><p>{item.content}</p></div>)}
       </section>
       {error && <div className="error" role="alert"><span>{error}</span><button onClick={() => dispatch(clearError())}>Dismiss</button></div>}
+      {voiceNotice && <p className={`voice-notice ${voiceStatus}`} role="status">{voiceNotice}</p>}
+      <form className="composer" onSubmit={send}>
+        <button className="attach" type="button" onClick={() => fileInput.current?.click()} disabled={isProcessing} aria-label="Attach complaint document" title="Attach complaint document">⌕</button>
+        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message AIVOA Co-Pilot..." disabled={isProcessing} />
+        <button className={`voice ${voiceStatus}`} type="button" onClick={startVoiceInput} disabled={isProcessing || voiceStatus === "listening"} aria-label="Speak complaint" aria-pressed={voiceStatus === "listening"} title="Speak complaint">
+          {voiceStatus === "listening" ? "●" : "◉"}
+        </button>
+        <button className="send" type="submit" disabled={!message.trim() || isProcessing} aria-label="Send message">➤</button>
+      </form>
       <p className="disclaimer">AI output supports QA triage. Verify all information before disposition.</p>
     </section>
   </main>;

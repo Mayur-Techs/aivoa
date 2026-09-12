@@ -3,7 +3,12 @@ import type { AssistantResponse, ComplaintForm, RiskAssessment } from "../types"
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, options);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, options);
+  } catch {
+    throw new Error("Cannot reach the AIVOA backend. Start it on port 8000, then try again.");
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(payload.detail ?? "Request failed");

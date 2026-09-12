@@ -34,11 +34,10 @@ The fallback is an availability feature, not a replacement for QA review. It onl
 
 ## Run locally
 
-Prerequisites: Node 20+, Python 3.11+, and optionally Docker Desktop for PostgreSQL.
+Prerequisites: Node 20+, Python 3.11+. PostgreSQL and Docker are optional.
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up -d database
 
 cd backend
 python -m venv .venv
@@ -55,7 +54,15 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:5173`. Without Docker, leave `DATABASE_URL` unset and the backend will use local SQLite for the demonstration; Docker Compose supplies the required PostgreSQL path.
+Open `http://localhost:5173`.
+
+The included `.env.example` uses SQLite, so no database installation is needed for the assessment demo. If you previously copied an older `.env.example` and the API says `ConnectionRefusedError` for port `5432`, change only this line in your root `.env`:
+
+```dotenv
+DATABASE_URL=sqlite+aiosqlite:///./aivoa.db
+```
+
+To use Docker PostgreSQL instead, run `docker compose up -d database` and set `DATABASE_URL=postgresql+asyncpg://aivoa:aivoa@localhost:5432/aivoa`.
 
 ### Voice input
 
@@ -63,14 +70,16 @@ Select the microphone beside the co-pilot prompt, allow the browser microphone p
 
 ## Groq configuration
 
-Add `GROQ_API_KEY` to `.env`. The original brief names `gemma2-9b-it`; Groq retired that model on 2025-10-08. The default is therefore Groq's supported `llama-3.1-8b-instant`. Set `GROQ_MODEL` explicitly if the reviewer requires a different currently available Groq model.
+Add `GROQ_API_KEY` to the root `.env` beside this README. Use the key exactly as issued; quotes are optional but unnecessary, so `GROQ_API_KEY=gsk_...` is preferred. The application safely falls back to local extraction rules if the key is absent, invalid, rate-limited, or a model is unavailable. The original brief names `gemma2-9b-it`; Groq retired that model on 2025-10-08. The default is therefore Groq's supported `llama-3.1-8b-instant`. Set `GROQ_MODEL` explicitly if the reviewer requires a different currently available Groq model.
 
 ## Demo path
 
-1. Type: `Apollo Pharmacy reported discolored capsules in Amoxicillin capsules 500 mg.`
+1. Type: `Apollo Pharmacy reported discolored capsules in Amoxicillin Capsules 500 mg. Batch number AMX240602. Manufacturing date March 2026. Expiry date February 2028. Please log this complaint.`
 2. Then correct it: `Sorry, the batch number is BMX24602 and the affected quantity is 48 capsules.`
 3. Reset, upload `demo-assets/metformin-complaint.eml`, then say: `Sorry, the batch number is CHG260712A and affected quantity is 50 kg 2 HDPE drums.`
 4. Verify the read-only form, risk assessment, and save action update without manual field entry.
+
+The co-pilot text area expands as you type up to a safe limit, then scrolls internally. Press Enter to send and Shift + Enter to add a line. The attach icon in the composer and the upload area above both open the same secure document picker.
 
 ## Validation
 

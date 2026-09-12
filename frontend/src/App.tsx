@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { saveComplaint } from "./api/client";
 import type { AppDispatch, RootState } from "./app/store";
 import { addUserMessage, clearError, resetIntake, submitChat, submitDocument } from "./features/complaint/complaintSlice";
 import { createVoiceRecognition } from "./features/complaint/speechRecognition";
 import type { VoiceRecognition } from "./features/complaint/speechRecognition";
+import type { ChatMessage } from "./types";
 
 const fieldGroups = [
   { title: "1. Origin & customer details", fields: [["Customer source", "customer_source"], ["Customer name", "customer_name"]] },
@@ -25,9 +26,17 @@ function App() {
   const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "error">("idle");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const composerInput = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<VoiceRecognition | null>(null);
 
   useEffect(() => () => recognitionRef.current?.abort(), []);
+
+  useEffect(() => {
+    const input = composerInput.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 144)}px`;
+  }, [message]);
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
@@ -44,6 +53,13 @@ function App() {
     if (!file || isProcessing) return;
     dispatch(addUserMessage(`Uploaded ${file.name} for extraction.`));
     await dispatch(submitDocument({ file, current: complaint }));
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
   };
 
   const persist = async () => {
@@ -111,7 +127,7 @@ function App() {
         </div>
         <p className="rationale">{risk.rationale}</p>
         {risk.missing_fields.length > 0 && <p className="missing"><strong>Still needed:</strong> {risk.missing_fields.join(" · ")}</p>}
-        {risk.root_cause_hypotheses.length > 0 && <details><summary>QA investigation cues & CAPA recommendation</summary><ul>{risk.root_cause_hypotheses.map((item) => <li key={item}>{item}</li>)}</ul><p>{risk.capa_recommendation}</p></details>}
+        {risk.root_cause_hypotheses.length > 0 && <details><summary>QA investigation cues & CAPA recommendation</summary><ul>{risk.root_cause_hypotheses.map((item: string) => <li key={item}>{item}</li>)}</ul><p>{risk.capa_recommendation}</p></details>}
       </section>
       <footer className="form-actions">
         <button className="secondary" onClick={() => { dispatch(resetIntake()); setSaveNotice(null); }}>↻ Reset form</button>
@@ -130,18 +146,19 @@ function App() {
       <button className="paste-action" onClick={() => setMessage("Paste the complaint text or email content below:")}>▤ Paste complaint text / email</button>
       {isProcessing && <div className="progress" aria-live="polite"><div /><span>Extracting complaint facts and assessing risk...</span></div>}
       <section className="conversation" aria-live="polite">
-        {messages.map((item) => <div className={`message ${item.role}`} key={item.id}><span>{item.role === "assistant" ? "✦" : "You"}</span><p>{item.content}</p></div>)}
+        {messages.map((item: ChatMessage) => <div className={`message ${item.role}`} key={item.id}><span>{item.role === "assistant" ? "✦" : "You"}</span><p>{item.content}</p></div>)}
       </section>
       {error && <div className="error" role="alert"><span>{error}</span><button onClick={() => dispatch(clearError())}>Dismiss</button></div>}
       {voiceNotice && <p className={`voice-notice ${voiceStatus}`} role="status">{voiceNotice}</p>}
       <form className="composer" onSubmit={send}>
         <button className="attach" type="button" onClick={() => fileInput.current?.click()} disabled={isProcessing} aria-label="Attach complaint document" title="Attach complaint document">⌕</button>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message AIVOA Co-Pilot..." disabled={isProcessing} />
+        <textarea ref={composerInput} rows={1} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message AIVOA Co-Pilot..." disabled={isProcessing} aria-label="Message AIVOA Co-Pilot" />
         <button className={`voice ${voiceStatus}`} type="button" onClick={startVoiceInput} disabled={isProcessing || voiceStatus === "listening"} aria-label="Speak complaint" aria-pressed={voiceStatus === "listening"} title="Speak complaint">
           {voiceStatus === "listening" ? "●" : "◉"}
         </button>
         <button className="send" type="submit" disabled={!message.trim() || isProcessing} aria-label="Send message">➤</button>
       </form>
+      <p className="composer-hint">Enter to send · Shift + Enter for a new line</p>
       <p className="disclaimer">AI output supports QA triage. Verify all information before disposition.</p>
     </section>
   </main>;

@@ -17,6 +17,8 @@ backend/.venv/
 .env.*
 !.env.example
 private/
+# Personal interview-preparation guide; deliberately not part of the submission.
+private/code_explanation.md
 
 # OS/editor files
 .DS_Store

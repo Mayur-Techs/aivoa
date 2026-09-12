@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { saveComplaint } from "./api/client";
 import type { AppDispatch, RootState } from "./app/store";
 import { addUserMessage, clearError, resetIntake, submitChat, submitDocument } from "./features/complaint/complaintSlice";
+import { createVoiceRecognition } from "./features/complaint/speechRecognition";
+import type { VoiceRecognition } from "./features/complaint/speechRecognition";
 
 const fieldGroups = [
   { title: "1. Origin & customer details", fields: [["Customer source", "customer_source"], ["Customer name", "customer_name"]] },
@@ -20,7 +22,12 @@ function App() {
   const { complaint, risk, messages, isProcessing, error, lastResponse } = useSelector((state: RootState) => state.complaint);
   const [message, setMessage] = useState("");
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "error">("idle");
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<VoiceRecognition | null>(null);
+
+  useEffect(() => () => recognitionRef.current?.abort(), []);
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,6 +53,37 @@ function App() {
       setSaveNotice(`Complaint #${saved.id} saved successfully.`);
     } catch (saveError) {
       setSaveNotice(saveError instanceof Error ? saveError.message : "Unable to save complaint.");
+    }
+  };
+
+  const startVoiceInput = () => {
+    if (isProcessing || voiceStatus === "listening") return;
+    const recognition = createVoiceRecognition();
+    if (!recognition) {
+      setVoiceStatus("error");
+      setVoiceNotice("Speech-to-text is not supported in this browser. You can still type or upload a document.");
+      return;
+    }
+    recognitionRef.current = recognition;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+      if (transcript) setMessage((current) => `${current} ${transcript}`.trim());
+    };
+    recognition.onerror = (event) => {
+      setVoiceStatus("error");
+      setVoiceNotice(event.error === "not-allowed" ? "Microphone access was not allowed. Enable it in your browser settings and try again." : "I could not hear a transcript. Please try again or type your message.");
+    };
+    recognition.onend = () => setVoiceStatus((status) => (status === "error" ? "error" : "idle"));
+    setVoiceNotice("Listening - speak your complaint or correction.");
+    setVoiceStatus("listening");
+    try {
+      recognition.start();
+    } catch {
+      setVoiceStatus("error");
+      setVoiceNotice("Microphone input is unavailable right now. Please try again or type your message.");
     }
   };
 
@@ -90,15 +128,19 @@ function App() {
       <input ref={fileInput} className="visually-hidden" type="file" accept=".pdf,.docx,.txt,.csv,.eml" onChange={upload} />
       <p className="or">or</p>
       <button className="paste-action" onClick={() => setMessage("Paste the complaint text or email content below:")}>▤ Paste complaint text / email</button>
+      <form className="composer" onSubmit={send}>
+        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Describe or correct this complaint..." disabled={isProcessing} />
+        <button className={`voice ${voiceStatus}`} type="button" onClick={startVoiceInput} disabled={isProcessing || voiceStatus === "listening"} aria-label="Speak complaint" aria-pressed={voiceStatus === "listening"} title="Speak complaint">
+          {voiceStatus === "listening" ? "●" : "◉"}
+        </button>
+        <button className="send" type="submit" disabled={!message.trim() || isProcessing} aria-label="Send message">➤</button>
+      </form>
+      {voiceNotice && <p className={`voice-notice ${voiceStatus}`} role="status">{voiceNotice}</p>}
       {isProcessing && <div className="progress" aria-live="polite"><div /><span>Extracting complaint facts and assessing risk...</span></div>}
       <section className="conversation" aria-live="polite">
         {messages.map((item) => <div className={`message ${item.role}`} key={item.id}><span>{item.role === "assistant" ? "✦" : "You"}</span><p>{item.content}</p></div>)}
       </section>
       {error && <div className="error" role="alert"><span>{error}</span><button onClick={() => dispatch(clearError())}>Dismiss</button></div>}
-      <form className="composer" onSubmit={send}>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Describe or correct this complaint..." disabled={isProcessing} />
-        <button className="send" type="submit" disabled={!message.trim() || isProcessing} aria-label="Send message">➤</button>
-      </form>
       <p className="disclaimer">AI output supports QA triage. Verify all information before disposition.</p>
     </section>
   </main>;

@@ -11,6 +11,7 @@ An assessment-ready customer complaint intake product for pharmaceutical API and
 - A conservative local rules fallback for offline demos, provider outages, and free-tier rate limits.
 - Natural-language corrections preserve prior complaint data.
 - Document intake for PDF, DOCX, TXT, CSV, and EML (10 MB limit) and a realistic demo email in [`demo-assets/`](demo-assets/).
+- Browser-based speech-to-text input for hands-free complaint entry. It uses the device's speech-recognition capability and never uploads audio to this application backend.
 - Decision-support extras: completeness scoring, missing-field prompts, root-cause investigation cues, CAPA recommendation, and deterministic AI risk classification.
 
 ## Architecture
@@ -56,6 +57,10 @@ pnpm dev
 
 Open `http://localhost:5173`. Without Docker, leave `DATABASE_URL` unset and the backend will use local SQLite for the demonstration; Docker Compose supplies the required PostgreSQL path.
 
+### Voice input
+
+Select the microphone beside the co-pilot prompt, allow the browser microphone permission, and speak naturally. The transcript appears in the prompt; review it and press Send. Voice input is an optional convenience feature - if a browser does not support speech recognition, normal text entry and document upload remain available.
+
 ## Groq configuration
 
 Add `GROQ_API_KEY` to `.env`. The original brief names `gemma2-9b-it`; Groq retired that model on 2025-10-08. The default is therefore Groq's supported `llama-3.1-8b-instant`. Set `GROQ_MODEL` explicitly if the reviewer requires a different currently available Groq model.
@@ -76,15 +81,3 @@ pytest
 cd ../frontend
 pnpm build
 ```
-
-## Deployment notes
-
-This repository includes a free-tier Render Blueprint in `render.yaml`. It creates a FastAPI web service, a static Vite site, and a free PostgreSQL database. Free services can sleep when idle, so the first request may take longer.
-
-1. Create an **empty** GitHub repository (do not add a README or `.gitignore`), push this repository, then create a new Render Blueprint from it.
-2. In Render, choose unique names if the default names are unavailable. Deploy the API and database first.
-3. Copy the API's `https://<api-name>.onrender.com` address into the static site's `VITE_API_URL` environment variable.
-4. Copy the static site's `https://<site-name>.onrender.com` address into the API's `FRONTEND_ORIGIN` variable.
-5. Add `GROQ_API_KEY` to the API service only, then redeploy both services.
-
-Render supplies the PostgreSQL connection string automatically and the Blueprint pins Python 3.12.14. The backend converts the standard `postgresql://` form to SQLAlchemy's asynchronous driver URL. Keep `GROQ_API_KEY` server-side only; never set it as a frontend `VITE_` variable.

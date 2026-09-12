@@ -30,6 +30,8 @@ services:
     staticPublishPath: dist
     autoDeployTrigger: checksPass
     envVars:
+      - key: NODE_VERSION
+        value: 22.13.0
       - key: VITE_API_URL
         sync: false
 

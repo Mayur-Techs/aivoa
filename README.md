@@ -64,6 +64,8 @@ DATABASE_URL=sqlite+aiosqlite:///./aivoa.db
 
 To use Docker PostgreSQL instead, run `docker compose up -d database` and set `DATABASE_URL=postgresql+asyncpg://aivoa:aivoa@localhost:5432/aivoa`.
 
+The API accepts the usual Vite local development addresses (`localhost` or `127.0.0.1` on ports 5173 and 5174), so it remains usable if Vite selects port 5174 because 5173 is occupied. Restart the backend after changing configuration or pulling updates.
+
 ### Voice input
 
 Select the microphone beside the co-pilot prompt, allow the browser microphone permission, and speak naturally. The transcript appears in the prompt; review it and press Send. Voice input is an optional convenience feature - if a browser does not support speech recognition, normal text entry and document upload remain available.

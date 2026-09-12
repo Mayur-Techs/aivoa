@@ -5,6 +5,19 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+def test_local_vite_preflight_is_allowed() -> None:
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/ai/chat",
+            headers={
+                "Origin": "http://localhost:5174",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
+
+
 def test_chat_then_correction_preserves_intake() -> None:
     with TestClient(app) as client:
         initial = client.post(

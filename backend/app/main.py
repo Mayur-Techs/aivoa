@@ -12,6 +12,12 @@ from .services.complaint_graph import run_intake
 from .services.document_text import UnsupportedDocumentError, extract_document_text
 
 settings = get_settings()
+LOCAL_DEVELOPMENT_ORIGINS = {
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+}
 
 
 @asynccontextmanager
@@ -23,7 +29,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="AIVOA Complaint Intake API", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=sorted({settings.frontend_origin, *LOCAL_DEVELOPMENT_ORIGINS}),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

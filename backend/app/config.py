@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     groq_api_key: str | None = None
     # gemma2-9b-it is configurable for the assignment; it is currently retired by Groq.
-    groq_model: str = "llama-3.1-8b-instant"
+    groq_model: str = "openai/gpt-oss-20b"
     database_url: str = "sqlite+aiosqlite:///./aivoa.db"
     frontend_origin: str = "http://localhost:5173"
     max_upload_bytes: int = 10 * 1024 * 1024

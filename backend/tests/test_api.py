@@ -53,12 +53,12 @@ def test_local_vite_preflight_is_allowed() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
 
 
-def test_no_groq_key_returns_503() -> None:
-    """Without a key the API must return 503, not a silent rules fallback."""
+def test_no_ai_key_returns_503() -> None:
+    """With neither Groq nor Gemini configured, the API must return 503."""
     import unittest.mock as mock
     from app.config import Settings
 
-    no_key_settings = Settings(groq_api_key=None, frontend_origin="http://localhost:5173")
+    no_key_settings = Settings(groq_api_key=None, gemini_api_key=None, frontend_origin="http://localhost:5173")
     with mock.patch("app.services.complaint_graph.get_settings", return_value=no_key_settings):
         with TestClient(app) as client:
             response = client.post(
@@ -66,7 +66,7 @@ def test_no_groq_key_returns_503() -> None:
                 json={"message": "Test complaint.", "current_complaint": {}},
             )
     assert response.status_code == 503
-    assert "GROQ_API_KEY" in response.json()["detail"]
+    assert "GROQ_API_KEY" in response.json()["detail"] or "GEMINI_API_KEY" in response.json()["detail"]
 
 
 def test_invalid_document_returns_a_safe_validation_error() -> None:

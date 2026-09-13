@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { saveComplaint } from "./api/client";
+import { fetchAiHealth, saveComplaint } from "./api/client";
 import type { AppDispatch, RootState } from "./app/store";
 import { addUserMessage, clearError, resetIntake, submitChat, submitDocument } from "./features/complaint/complaintSlice";
 import { createVoiceRecognition } from "./features/complaint/speechRecognition";
@@ -25,9 +25,23 @@ function App() {
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "error">("idle");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<{ active: string; groq: string; gemini: string }>({ active: "none", groq: "error", gemini: "error" });
   const fileInput = useRef<HTMLInputElement>(null);
   const composerInput = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<VoiceRecognition | null>(null);
+
+  // Poll AI health every 30 seconds — drives the blinking status dot
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      const status = await fetchAiHealth();
+      if (!cancelled) setAiStatus(status);
+    };
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
 
   useEffect(() => () => recognitionRef.current?.abort(), []);
 
@@ -137,7 +151,26 @@ function App() {
     </section>
 
     <section className="assistant-card" aria-label="AIVOA co-pilot">
-      <header className="panel-header assistant-header"><div><p className="brand-mark">✦ <span>AIVOA</span></p><h1>Co-Pilot</h1><p>Complaint intake assistant</p></div><span className="beta">BETA</span></header>
+      <header className="panel-header assistant-header">
+        <div>
+          <p className="brand-mark">✦ <span>AIVOA</span></p>
+          <h1>Co-Pilot</h1><p>Complaint intake assistant</p>
+        </div>
+        <div className="header-badges">
+          <span
+            className={`ai-status-dot ${aiStatus.active !== "none" ? "online" : "offline"}`}
+            title={
+              aiStatus.active === "none"
+                ? "AI offline — check API keys"
+                : aiStatus.active === "gemini"
+                  ? `Active: Gemini (Groq unavailable)`
+                  : `Active: Groq`
+            }
+            aria-label={aiStatus.active !== "none" ? "AI online" : "AI offline"}
+          />
+          <span className="beta">BETA</span>
+        </div>
+      </header>
       <button className="upload-zone" onClick={() => fileInput.current?.click()} disabled={isProcessing}>
         <span className="upload-icon">⇧</span><strong>Drop a complaint document here</strong><small>or click to browse · PDF, DOCX, TXT, CSV, EML · max 10 MB</small>
       </button>

@@ -38,3 +38,13 @@ export function saveComplaint(payload: AssistantResponse): Promise<{ id: number;
     body: JSON.stringify(payload),
   });
 }
+
+export async function fetchAiHealth(): Promise<{ groq: string; gemini: string; active: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/health/ai`);
+    if (!res.ok) return { groq: "error", gemini: "error", active: "none" };
+    return res.json();
+  } catch {
+    return { groq: "error", gemini: "error", active: "none" };
+  }
+}

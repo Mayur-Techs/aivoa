@@ -8,7 +8,7 @@ from .config import get_settings
 from .database import create_tables, get_session
 from .models import ComplaintRecord
 from .schemas import AssistantRequest, AssistantResponse, ComplaintForm, SavedComplaint
-from .services.complaint_graph import run_intake
+from .services.complaint_graph import check_ai_health, run_intake
 from .services.document_text import UnsupportedDocumentError, extract_document_text
 
 settings = get_settings()
@@ -49,6 +49,16 @@ def to_response(result: dict) -> AssistantResponse:
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/health/ai")
+async def ai_health() -> dict[str, str]:
+    """
+    Returns current AI provider status.
+    Frontend uses this to drive the blinking status dot.
+    Response: {"groq": "ok"|"error", "gemini": "ok"|"error", "active": "groq"|"gemini"|"none"}
+    """
+    return check_ai_health()
 
 
 @app.post("/api/ai/chat", response_model=AssistantResponse)
